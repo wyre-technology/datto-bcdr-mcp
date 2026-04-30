@@ -26,46 +26,25 @@ import { elicitSelection, elicitText } from "./utils/elicitation.js";
 // Credentials
 // ---------------------------------------------------------------------------
 
-type Region = "us" | "eu";
-const VALID_REGIONS: Region[] = ["us", "eu"];
-
 interface DattoBcdrCredentials {
   publicKey: string;
   privateKey: string;
-  region: Region;
 }
 
 function getCredentials(): DattoBcdrCredentials | null {
   const publicKey = process.env.DATTO_BCDR_PUBLIC_KEY;
   const privateKey = process.env.DATTO_BCDR_PRIVATE_KEY;
-  const regionEnv = (process.env.DATTO_BCDR_REGION || "us").toLowerCase();
-
-  if (!publicKey || !privateKey) {
-    return null;
-  }
-
-  const region: Region = VALID_REGIONS.includes(regionEnv as Region)
-    ? (regionEnv as Region)
-    : "us";
-
-  return { publicKey, privateKey, region };
+  if (!publicKey || !privateKey) return null;
+  return { publicKey, privateKey };
 }
 
 function createClient(creds: DattoBcdrCredentials): DattoBcdrClient {
-  // The SDK's config naming mirrors node-datto-rmm (apiKey/apiSecretKey),
-  // even though the BCDR API itself uses "public/private key" terminology.
-  // The gateway-side credential fields stay as publicKey/privateKey for
-  // user clarity; we translate at the boundary.
-  // Region is resolved to a base URL here because the SDK takes apiUrl, not
-  // a region enum.
-  const apiUrl =
-    creds.region === "eu"
-      ? "https://api.eu.datto.com/v1"
-      : "https://api.datto.com/v1";
+  // The Datto BCDR API uses "public/private key" in its docs but the SDK
+  // mirrors node-datto-rmm naming (apiKey/apiSecretKey). Translate at the
+  // boundary so user-facing credential labels stay consistent with Datto's.
   return new DattoBcdrClient({
     apiKey: creds.publicKey,
     apiSecretKey: creds.privateKey,
-    apiUrl,
   });
 }
 
@@ -224,30 +203,56 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
   // Helpers
   // -------------------------------------------------------------------------
 
+  // Hard cap to keep one tool call from streaming the entire alert/activity
+  // history when the user picks "no filter" — a busy partner can have tens of
+  // thousands of records.
+  const DATE_FILTER_PAGE_CAP = 2000;
+
+  interface DateRangeMs {
+    sinceMs?: number;
+    untilMs?: number;
+  }
+
+  // Datto inconsistently uses ms vs seconds for timestamps; anything below
+  // ~1e12 we treat as seconds.
+  function normalizeTs(raw: number): number {
+    return raw < 1e12 ? raw * 1000 : raw;
+  }
+
+  interface PaginatedIterableLike<T> {
+    [Symbol.asyncIterator](): AsyncIterator<T>;
+  }
+
   // Datto BCDR's alert + activity endpoints don't accept date query params,
-  // so we paginate then filter client-side. Both shapes use Unix-ms / Unix-s
-  // timestamps under different field names; this helper normalizes both.
-  function filterByTimestamp<T extends { createdAt?: number; timestamp?: number }>(
-    items: T[],
-    range: { since?: string; until?: string }
-  ): T[] {
-    if (!range.since && !range.until) return items;
-    const sinceMs = range.since ? new Date(range.since).getTime() : -Infinity;
-    const untilMs = range.until ? new Date(range.until).getTime() : Infinity;
-    return items.filter((item) => {
+  // so we paginate via the SDK's async iterator and filter per-item. Stops
+  // early when the cap is hit so a "no filter" call doesn't enumerate forever.
+  async function collectWithDateFilter<T extends { createdAt?: number; timestamp?: number }>(
+    iterable: PaginatedIterableLike<T>,
+    range: DateRangeMs
+  ): Promise<T[]> {
+    const sinceMs = range.sinceMs ?? -Infinity;
+    const untilMs = range.untilMs ?? Infinity;
+    const out: T[] = [];
+    for await (const item of iterable) {
       const raw = item.createdAt ?? item.timestamp;
-      if (raw == null) return true;
-      // Datto inconsistently uses ms vs s — anything below ~1e12 we treat as seconds.
-      const ts = raw < 1e12 ? raw * 1000 : raw;
-      return ts >= sinceMs && ts <= untilMs;
-    });
+      if (raw != null) {
+        const ts = normalizeTs(raw);
+        if (ts < sinceMs || ts > untilMs) continue;
+      }
+      out.push(item);
+      if (out.length >= DATE_FILTER_PAGE_CAP) break;
+    }
+    return out;
   }
 
   async function resolveDateRange(
     args: { since?: string; until?: string }
-  ): Promise<{ since?: string; until?: string }> {
+  ): Promise<DateRangeMs> {
     if (args.since || args.until) {
-      return { since: args.since, until: args.until };
+      return {
+        sinceMs: args.since ? new Date(args.since).getTime() : undefined,
+        untilMs: args.until ? new Date(args.until).getTime() : undefined,
+      };
     }
 
     const choice = await elicitSelection(
@@ -262,16 +267,15 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
       ]
     );
 
-    const now = new Date();
+    const nowMs = Date.now();
+    const PRESET_WINDOWS_MS: Record<string, number> = {
+      "24h": 24 * 60 * 60 * 1000,
+      "7d": 7 * 24 * 60 * 60 * 1000,
+      "30d": 30 * 24 * 60 * 60 * 1000,
+    };
     if (!choice || choice === "all") return {};
-    if (choice === "24h") {
-      return { since: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString() };
-    }
-    if (choice === "7d") {
-      return { since: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() };
-    }
-    if (choice === "30d") {
-      return { since: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString() };
+    if (choice in PRESET_WINDOWS_MS) {
+      return { sinceMs: nowMs - PRESET_WINDOWS_MS[choice] };
     }
     if (choice === "custom") {
       const since = await elicitText(
@@ -285,8 +289,8 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
         "End datetime"
       );
       return {
-        since: since || undefined,
-        until: until || undefined,
+        sinceMs: since ? new Date(since).getTime() : undefined,
+        untilMs: until ? new Date(until).getTime() : undefined,
       };
     }
     return {};
@@ -444,37 +448,14 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
         }
 
         case "datto_bcdr_list_alerts": {
-          const params = (args ?? {}) as {
-            since?: string;
-            until?: string;
-            page?: number;
-            perPage?: number;
-          };
-          // The SDK's alerts.list() takes pagination only — date filtering
-          // is applied client-side after the fetch. The Datto BCDR alert
-          // endpoint does not accept since/until query params.
-          const range = await resolveDateRange(params);
-          const response = await client.alerts.list({
-            page: params.page ?? 1,
-            perPage: params.perPage ?? 250,
-          });
-          const alerts = filterByTimestamp(response?.items ?? [], range);
+          const range = await resolveDateRange((args ?? {}) as { since?: string; until?: string });
+          const alerts = await collectWithDateFilter(client.alerts.listAll(), range);
           return { content: [{ type: "text", text: JSON.stringify(alerts, null, 2) }] };
         }
 
         case "datto_bcdr_list_activity": {
-          const params = (args ?? {}) as {
-            since?: string;
-            until?: string;
-            page?: number;
-            perPage?: number;
-          };
-          const range = await resolveDateRange(params);
-          const response = await client.activity.list({
-            page: params.page ?? 1,
-            perPage: params.perPage ?? 250,
-          });
-          const activity = filterByTimestamp(response?.items ?? [], range);
+          const range = await resolveDateRange((args ?? {}) as { since?: string; until?: string });
+          const activity = await collectWithDateFilter(client.activity.listAll(), range);
           return { content: [{ type: "text", text: JSON.stringify(activity, null, 2) }] };
         }
 
@@ -556,7 +537,6 @@ async function startHttpTransport(): Promise<void> {
         const headers = req.headers as Record<string, string | string[] | undefined>;
         const publicKey = headers["x-datto-bcdr-public-key"] as string | undefined;
         const privateKey = headers["x-datto-bcdr-private-key"] as string | undefined;
-        const regionHeader = (headers["x-datto-bcdr-region"] as string | undefined)?.toLowerCase();
 
         if (!publicKey || !privateKey) {
           res.writeHead(401, { "Content-Type": "application/json" });
@@ -571,12 +551,7 @@ async function startHttpTransport(): Promise<void> {
           return;
         }
 
-        const region: Region =
-          regionHeader && VALID_REGIONS.includes(regionHeader as Region)
-            ? (regionHeader as Region)
-            : "us";
-
-        gatewayCredentials = { publicKey, privateKey, region };
+        gatewayCredentials = { publicKey, privateKey };
       }
 
       // Stateless: fresh server + transport per request
