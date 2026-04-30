@@ -52,10 +52,20 @@ function getCredentials(): DattoBcdrCredentials | null {
 }
 
 function createClient(creds: DattoBcdrCredentials): DattoBcdrClient {
+  // The SDK's config naming mirrors node-datto-rmm (apiKey/apiSecretKey),
+  // even though the BCDR API itself uses "public/private key" terminology.
+  // The gateway-side credential fields stay as publicKey/privateKey for
+  // user clarity; we translate at the boundary.
+  // Region is resolved to a base URL here because the SDK takes apiUrl, not
+  // a region enum.
+  const apiUrl =
+    creds.region === "eu"
+      ? "https://api.eu.datto.com/v1"
+      : "https://api.datto.com/v1";
   return new DattoBcdrClient({
-    publicKey: creds.publicKey,
-    privateKey: creds.privateKey,
-    region: creds.region,
+    apiKey: creds.publicKey,
+    apiSecretKey: creds.privateKey,
+    apiUrl,
   });
 }
 
@@ -213,6 +223,25 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
   // -------------------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------------------
+
+  // Datto BCDR's alert + activity endpoints don't accept date query params,
+  // so we paginate then filter client-side. Both shapes use Unix-ms / Unix-s
+  // timestamps under different field names; this helper normalizes both.
+  function filterByTimestamp<T extends { createdAt?: number; timestamp?: number }>(
+    items: T[],
+    range: { since?: string; until?: string }
+  ): T[] {
+    if (!range.since && !range.until) return items;
+    const sinceMs = range.since ? new Date(range.since).getTime() : -Infinity;
+    const untilMs = range.until ? new Date(range.until).getTime() : Infinity;
+    return items.filter((item) => {
+      const raw = item.createdAt ?? item.timestamp;
+      if (raw == null) return true;
+      // Datto inconsistently uses ms vs s — anything below ~1e12 we treat as seconds.
+      const ts = raw < 1e12 ? raw * 1000 : raw;
+      return ts >= sinceMs && ts <= untilMs;
+    });
+  }
 
   async function resolveDateRange(
     args: { since?: string; until?: string }
@@ -393,7 +422,7 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
             agentId: string;
             epoch: number;
           };
-          const buffer = await client.screenshots.get(serialNumber, agentId, epoch);
+          const buffer = await client.screenshots.getImage(serialNumber, agentId, epoch);
           const data: Buffer = Buffer.isBuffer(buffer)
             ? (buffer as Buffer)
             : Buffer.from(buffer as unknown as ArrayBuffer);
@@ -421,14 +450,16 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
             page?: number;
             perPage?: number;
           };
+          // The SDK's alerts.list() takes pagination only — date filtering
+          // is applied client-side after the fetch. The Datto BCDR alert
+          // endpoint does not accept since/until query params.
           const range = await resolveDateRange(params);
-          const alerts = await client.alerts.list({
-            since: range.since,
-            until: range.until,
+          const response = await client.alerts.list({
             page: params.page ?? 1,
             perPage: params.perPage ?? 250,
           });
-          return { content: [{ type: "text", text: JSON.stringify(alerts ?? [], null, 2) }] };
+          const alerts = filterByTimestamp(response?.items ?? [], range);
+          return { content: [{ type: "text", text: JSON.stringify(alerts, null, 2) }] };
         }
 
         case "datto_bcdr_list_activity": {
@@ -439,13 +470,12 @@ function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Server {
             perPage?: number;
           };
           const range = await resolveDateRange(params);
-          const activity = await client.activity.list({
-            since: range.since,
-            until: range.until,
+          const response = await client.activity.list({
             page: params.page ?? 1,
             perPage: params.perPage ?? 250,
           });
-          return { content: [{ type: "text", text: JSON.stringify(activity ?? [], null, 2) }] };
+          const activity = filterByTimestamp(response?.items ?? [], range);
+          return { content: [{ type: "text", text: JSON.stringify(activity, null, 2) }] };
         }
 
         default:

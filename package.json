@@ -45,7 +45,7 @@
   "homepage": "https://github.com/wyre-technology/datto-bcdr-mcp#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
-    "@wyre-technology/node-datto-bcdr": "^0.1.0"
+    "@wyre-technology/node-datto-bcdr": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
