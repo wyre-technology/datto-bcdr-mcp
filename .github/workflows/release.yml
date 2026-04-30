@@ -109,6 +109,14 @@ jobs:
             exit 1
           fi
           echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Prepare npmrc for build secret
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "@wyre-technology:registry=https://npm.pkg.github.com"
+            echo "//npm.pkg.github.com/:_authToken=$GH_TOKEN"
+          } > /tmp/.npmrc
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -121,6 +129,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          secret-files: |
+            npmrc=/tmp/.npmrc
       - name: Get released version
         id: release-version
         env:
@@ -177,9 +187,9 @@ jobs:
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
           IMAGE="ghcr.io/${{ github.repository }}:latest"
-          echo "Deploying $IMAGE to mcpgw-prod-datto-rmm (revision tag sha-${SHORT_SHA}-${GITHUB_RUN_ID})"
+          echo "Deploying $IMAGE to gwp-datto-bcdr (revision tag sha-${SHORT_SHA}-${GITHUB_RUN_ID})"
           az containerapp update \
-            --name mcpgw-prod-datto-rmm \
+            --name gwp-datto-bcdr \
             --resource-group mcp-gateway-prod \
             --image "$IMAGE" \
             --set-env-vars "IMAGE_VERSION=sha-${SHORT_SHA}-${GITHUB_RUN_ID}"
@@ -204,7 +214,7 @@ jobs:
       - name: Stamp version into server.json
         run: |
           jq --arg v "$VERSION" \
-            '.version = $v | .packages[0].identifier = "ghcr.io/wyre-technology/datto-rmm-mcp:v" + $v' \
+            '.version = $v | .packages[0].identifier = "ghcr.io/wyre-technology/datto-bcdr-mcp:v" + $v' \
             server.json > server.json.tmp
           mv server.json.tmp server.json
           cat server.json
@@ -217,5 +227,5 @@ jobs:
       - name: Verify registry listing
         run: |
           sleep 5
-          curl -sf "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.wyre-technology/datto-rmm-mcp" \
+          curl -sf "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.wyre-technology/datto-bcdr-mcp" \
             | jq '.servers[]?.server | {name, version}'
