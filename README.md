@@ -12,7 +12,7 @@ verifications, off-site sync status, alerts, and activity logs to AI assistants.
 | Tool | Description |
 |------|-------------|
 | `datto_bcdr_list_devices` | List all SIRIS/Alto appliances in the partner portal |
-| `datto_bcdr_get_device` | Get appliance details by `serialNumber` |
+| `datto_bcdr_get_device` | Get appliance details by `serialNumber` (renders as an interactive card in MCP Apps hosts) |
 | `datto_bcdr_list_assets` | List protected agents on an appliance |
 | `datto_bcdr_get_asset` | Get a specific protected agent |
 | `datto_bcdr_list_backups` | List recovery points for an agent |
@@ -24,6 +24,15 @@ verifications, off-site sync status, alerts, and activity logs to AI assistants.
 
 When the user omits required filters (date range, serial number, etc.) the
 server uses MCP elicitation to prompt for them.
+
+## Features
+
+- **Interactive Device Card (MCP Apps, SEP-1865)**: `datto_bcdr_get_device`
+  renders as a read-only interactive card in MCP Apps hosts (Claude
+  Desktop/web) showing the appliance's backup status at a glance — neutral by
+  default, brandable via `window.__BRAND__` injection or `MCP_BRAND_*` env
+  vars; plain-JSON behavior is unchanged in other hosts. Edit `ui/` and run
+  `npm run build:ui` to regenerate the embedded card bundle.
 
 ## Configuration
 
