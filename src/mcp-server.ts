@@ -15,7 +15,6 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { DattoBcdrClient } from "@wyre-technology/node-datto-bcdr";
-import { setServerRef } from "./utils/server-ref.js";
 import { elicitSelection, elicitText } from "./utils/elicitation.js";
 import {
   DEVICE_CARD_META,
@@ -72,7 +71,10 @@ export function createMcpServer(credentialOverrides?: DattoBcdrCredentials): Ser
     }
   );
 
-  setServerRef(server);
+  // The caller owns binding this server into server-ref.ts's scope now
+  // (bindServerRef for stdio's single session, runWithServerRef wrapping
+  // the whole per-request chain for HTTP) — createMcpServer() stays
+  // side-effect-free with respect to server-ref.
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
