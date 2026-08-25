@@ -1,5 +1,5 @@
 {
-  "name": "@wyre-technology/datto-bcdr-mcp",
+  "name": "@wyre-ai/datto-bcdr-mcp",
   "version": "0.0.0",
   "description": "Datto BCDR (Backup Portal) MCP server for Claude — backups, screenshots, recovery points, alerts",
   "type": "module",
@@ -25,7 +25,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wyre-technology/datto-bcdr-mcp.git"
+    "url": "git+https://github.com/WYRE-AI/datto-bcdr-mcp.git"
   },
   "keywords": [
     "mcp",
@@ -41,9 +41,9 @@
   "author": "Wyre Technology",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/wyre-technology/datto-bcdr-mcp/issues"
+    "url": "https://github.com/WYRE-AI/datto-bcdr-mcp/issues"
   },
-  "homepage": "https://github.com/wyre-technology/datto-bcdr-mcp#readme",
+  "homepage": "https://github.com/WYRE-AI/datto-bcdr-mcp#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@wyre-technology/node-datto-bcdr": "^2.0.2"

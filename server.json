@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.wyre-technology/datto-bcdr-mcp",
+  "name": "io.github.WYRE-AI/datto-bcdr-mcp",
   "title": "Datto BCDR",
   "description": "MCP server for Datto BCDR — appliances, agents, recovery points, screenshots, alerts.",
   "repository": {
-    "url": "https://github.com/wyre-technology/datto-bcdr-mcp",
+    "url": "https://github.com/WYRE-AI/datto-bcdr-mcp",
     "source": "github"
   },
   "version": "0.0.0",
-  "websiteUrl": "https://github.com/wyre-technology/datto-bcdr-mcp",
+  "websiteUrl": "https://github.com/WYRE-AI/datto-bcdr-mcp",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/wyre-technology/datto-bcdr-mcp:0.0.0",
+      "identifier": "ghcr.io/wyre-ai/datto-bcdr-mcp:0.0.0",
       "transport": {
         "type": "stdio"
       },

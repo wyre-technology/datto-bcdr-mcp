@@ -1,6 +1,6 @@
 # Datto BCDR MCP Server
 
-[![Release](https://github.com/wyre-technology/datto-bcdr-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/wyre-technology/datto-bcdr-mcp/actions/workflows/release.yml)
+[![Release](https://github.com/WYRE-AI/datto-bcdr-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/WYRE-AI/datto-bcdr-mcp/actions/workflows/release.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Model Context Protocol (MCP) server for the Datto BCDR (Backup Portal) API.
