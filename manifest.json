@@ -5,9 +5,9 @@
   "version": "0.0.0",
   "description": "MCP server for Datto BCDR (Backup Portal) - access appliances, agents, recovery points, screenshots, and alerts through AI assistants",
   "long_description": "Provides AI assistants with structured access to your Datto BCDR (Backup Portal) data. List SIRIS/Alto appliances, inspect protected agents, browse recovery points and screenshot verifications, and review alerts and activity logs through the Model Context Protocol.",
-  "author": { "name": "Wyre Technology", "url": "https://github.com/wyre-technology" },
-  "repository": { "type": "git", "url": "https://github.com/wyre-technology/datto-bcdr-mcp" },
-  "homepage": "https://github.com/wyre-technology/datto-bcdr-mcp",
+  "author": { "name": "Wyre Technology", "url": "https://github.com/WYRE-AI" },
+  "repository": { "type": "git", "url": "https://github.com/WYRE-AI/datto-bcdr-mcp" },
+  "homepage": "https://github.com/WYRE-AI/datto-bcdr-mcp",
   "license": "Apache-2.0",
   "keywords": ["datto", "bcdr", "backup", "siris", "alto", "msp", "kaseya"],
   "server": {
